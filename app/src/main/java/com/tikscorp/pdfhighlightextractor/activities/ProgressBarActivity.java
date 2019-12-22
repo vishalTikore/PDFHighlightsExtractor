@@ -8,6 +8,7 @@ import android.os.Environment;
 import android.provider.OpenableColumns;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -49,8 +50,15 @@ public class ProgressBarActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onBackPressed() {
+    public boolean onOptionsItemSelected(MenuItem item) {
         highlightedTextExtractor.cancel(true);
+        return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    protected void onStop() {
+        highlightedTextExtractor.cancel(true);
+        super.onStop();
     }
 
     /**

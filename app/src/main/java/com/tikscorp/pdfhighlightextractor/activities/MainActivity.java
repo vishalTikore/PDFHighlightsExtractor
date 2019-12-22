@@ -21,6 +21,7 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.tikscorp.pdfhighlightextractor.constants.Constants;
 import com.tikscorp.pdfhighlightextractor.R;
@@ -35,7 +36,6 @@ import static com.tikscorp.pdfhighlightextractor.constants.Constants.OUT_FOLDER;
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
 
     private int STORAGE_PERMISSION_CODE = 101;
-    ProgressBar progressBar;
     private Logger logger = Logger.getLogger(MainActivity.class.getName());
     static Context context = null;
     public void setContext(Context context) {
@@ -104,11 +104,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 }
             });
             alertDialog.show();
-
-          /*  AlertDialog.Builder builder = new AlertDialog.Builder(this);
-            builder.setMessage(Constants.INFO_MSG);
-            AlertDialog alertDialog = builder.create();
-            alertDialog.show();*/
             return true;
         }
         return super.onOptionsItemSelected(item);
@@ -180,6 +175,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 }
                 else
                 {
+                    Toast.makeText(this,"Check any file explorer app is installed on your device",Toast.LENGTH_SHORT).show();
                     logger.log(Level.ALL,"Error in opening folder as no default app found");
                 }
                 break;
@@ -192,31 +188,25 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
      * @param      */
     public void showNoAnnotationFoundMessage() {
 
-                AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-                ViewGroup viewGroup = findViewById(android.R.id.content);
-                View dialogView = LayoutInflater.from(getApplicationContext()).inflate(R.layout.customdialog, viewGroup, false);
-                Button dialogCloseButton = (Button)dialogView.findViewById(R.id.buttonOk);
+        AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+        ViewGroup viewGroup = findViewById(android.R.id.content);
+        View dialogView = LayoutInflater.from(getApplicationContext()).inflate(R.layout.customdialog, viewGroup, false);
+        Button dialogCloseButton = (Button)dialogView.findViewById(R.id.buttonOk);
         TextView textView1 = (TextView) dialogView.findViewById(R.id.customTextView1);
         textView1.setText("Try Another PDF");
         TextView textView = (TextView) dialogView.findViewById(R.id.customTextView);
         textView.setText(Constants.NO_ANNOTATION_FOUND_MSG);
-                builder.setView(dialogView);
-                final AlertDialog alertDialog = builder.create();
-                dialogCloseButton.setOnClickListener(new View.OnClickListener(){
-                    @Override
-                    public void onClick(View v) {
-                        // TODO Auto-generated method stub
-                        alertDialog.dismiss();
-                    }
-                });
-                alertDialog.show();
+        builder.setView(dialogView);
+        final AlertDialog alertDialog = builder.create();
+        dialogCloseButton.setOnClickListener(new View.OnClickListener(){
+            @Override
+            public void onClick(View v) {
+                // TODO Auto-generated method stub
+                alertDialog.dismiss();
+            }
+        });
+        alertDialog.show();
 
-
-
-       /* AlertDialog.Builder builder = new AlertDialog.Builder(context);
-        builder.setMessage(Constants.NO_ANNOTATION_FOUND_MSG);
-        AlertDialog alertDialog = builder.create();
-        alertDialog.show();*/
     }
 
 }
