@@ -29,12 +29,22 @@ public class CompleteMessageActivity extends AppCompatActivity {
     }
 
 
+    @Override
+    public void onBackPressed() {
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        intent.putExtra(Constants.SHOW_EXTRACTED_PDF_BUTTON,true);
+        startActivity(intent);
+        finish();
+        super.onBackPressed();
+    }
+
     protected void openOutputFile(File out) {
         MimeTypeMap map = MimeTypeMap.getSingleton();
         String ext = MimeTypeMap.getFileExtensionFromUrl(out.getName());
         String type = map.getMimeTypeFromExtension(ext);
         if (type == null)
-            type = "*/*";
+            type = "application/pdf";
         Intent intent = new Intent(Intent.ACTION_VIEW);
         Uri data = FileProvider.getUriForFile(this, BuildConfig.APPLICATION_ID + ".provider", out);
         intent.setDataAndType(data, type);
@@ -47,17 +57,9 @@ public class CompleteMessageActivity extends AppCompatActivity {
     }
 
 
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        Intent intent = new Intent(this, MainActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        intent.putExtra(Constants.SHOW_EXTRACTED_PDF_BUTTON,true);
-        startActivity(intent);
-        return super.onOptionsItemSelected(item);
-    }
-
     public void startMainActivity(View view) {
         Intent intent = new Intent(this, MainActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         intent.putExtra(Constants.SHOW_EXTRACTED_PDF_BUTTON,true);
         startActivity(intent);
     }

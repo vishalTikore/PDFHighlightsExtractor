@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.support.v4.app.ActivityCompat;
@@ -19,15 +20,13 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
-import com.tikscorp.pdfhighlightextractor.constants.Constants;
+
 import com.tikscorp.pdfhighlightextractor.R;
+import com.tikscorp.pdfhighlightextractor.constants.Constants;
 
 import java.io.File;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static com.tikscorp.pdfhighlightextractor.constants.Constants.OUT_FOLDER;
@@ -69,6 +68,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     }
 
+    @Override
+    public void onBackPressed() {
+        finish();
+        super.onBackPressed();
+    }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -85,28 +89,46 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
         if (id == R.id.action_settings) {
-
-            AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-            ViewGroup viewGroup = findViewById(android.R.id.content);
-            View dialogView = LayoutInflater.from(getApplicationContext()).inflate(R.layout.customdialog, viewGroup, false);
-            Button dialogCloseButton = (Button)dialogView.findViewById(R.id.buttonOk);
-            TextView textView = (TextView) dialogView.findViewById(R.id.customTextView);
-            textView.setText(Constants.INFO_MSG);
-            TextView textView1 = (TextView) dialogView.findViewById(R.id.customTextView1);
-            textView1.setText("About App");
-            builder.setView(dialogView);
-            final AlertDialog alertDialog = builder.create();
-            dialogCloseButton.setOnClickListener(new View.OnClickListener(){
-                @Override
-                public void onClick(View v) {
-                    // TODO Auto-generated method stub
-                    alertDialog.dismiss();
-                }
-            });
-            alertDialog.show();
+            showAlert("About App", Constants.INFO_MSG);
             return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    /**
+     * Alert dialog box
+     * @param heading
+     * @param textMsg
+     *
+     */
+    private void showAlert( String heading, String textMsg) {
+        AlertDialog.Builder builder = null;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            builder = new AlertDialog.Builder(context, android.R.style.Theme_Material_Light_Dialog_Alert);
+        } else {
+            builder = new AlertDialog.Builder(context);
+        }
+        ViewGroup viewGroup = findViewById(android.R.id.content);
+        View dialogView = LayoutInflater.from(getApplicationContext()).inflate(R.layout.customdialog, viewGroup, false);
+        Button dialogCloseButton = (Button) dialogView.findViewById(R.id.buttonOk);
+        TextView textView = (TextView) dialogView.findViewById(R.id.customTextView);
+        textView.setText(textMsg);
+        TextView textView1 = (TextView) dialogView.findViewById(R.id.customTextView1);
+        textView1.setText(heading);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            textView1.setTextAppearance( android.support.v7.appcompat.R.style.TextAppearance_AppCompat_Headline);
+            textView.setTextAppearance(android.support.v7.appcompat.R.style.TextAppearance_AppCompat_Medium);
+        }
+        builder.setView(dialogView);
+        final AlertDialog alertDialog = builder.create();
+        dialogCloseButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // TODO Auto-generated method stub
+                alertDialog.dismiss();
+            }
+        });
+        alertDialog.show();
     }
 
     /**
@@ -166,18 +188,21 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 if (!outputFolder.exists()) {
                     outputFolder.mkdirs();
                 }
-                Uri selectedUri = Uri.parse(Environment.getExternalStorageDirectory() + File.separator+OUT_FOLDER+File.separator);
-                Intent fileOpenIntent = new Intent(Intent.ACTION_VIEW);
-                fileOpenIntent.setDataAndType(selectedUri, "resource/folder");
-                if (fileOpenIntent.resolveActivityInfo(getPackageManager(), 0) != null)
+                showAlert("Output Folder Location",outputFolder.getAbsolutePath());
+//                Uri selectedUri = FileProvider.getUriForFile(context, "com.mypackage.myprovider", outputFolder);
+//
+//                Intent fileOpenIntent = new Intent(Intent.ACTION_VIEW);
+//                fileOpenIntent.setDataAndType(selectedUri, "*/*");
+//                startActivity(fileOpenIntent);
+                /*if (fileOpenIntent.resolveActivityInfo(getPackageManager(), 0) != null)
                 {
                     startActivity(fileOpenIntent);
                 }
                 else
                 {
-                    Toast.makeText(this,"Check any file explorer app is installed on your device",Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this,"Not able to open folder, Please find PDF @INTERNAL_STORAGE/HighlightedPDFs",Toast.LENGTH_SHORT).show();
                     logger.log(Level.ALL,"Error in opening folder as no default app found");
-                }
+                }*/
                 break;
 
         }
@@ -187,26 +212,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
      * Shows message if not Annotation is found
      * @param      */
     public void showNoAnnotationFoundMessage() {
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-        ViewGroup viewGroup = findViewById(android.R.id.content);
-        View dialogView = LayoutInflater.from(getApplicationContext()).inflate(R.layout.customdialog, viewGroup, false);
-        Button dialogCloseButton = (Button)dialogView.findViewById(R.id.buttonOk);
-        TextView textView1 = (TextView) dialogView.findViewById(R.id.customTextView1);
-        textView1.setText("Try Another PDF");
-        TextView textView = (TextView) dialogView.findViewById(R.id.customTextView);
-        textView.setText(Constants.NO_ANNOTATION_FOUND_MSG);
-        builder.setView(dialogView);
-        final AlertDialog alertDialog = builder.create();
-        dialogCloseButton.setOnClickListener(new View.OnClickListener(){
-            @Override
-            public void onClick(View v) {
-                // TODO Auto-generated method stub
-                alertDialog.dismiss();
-            }
-        });
-        alertDialog.show();
-
+        showAlert("Try Another PDF", Constants.NO_ANNOTATION_FOUND_MSG);
     }
 
 }

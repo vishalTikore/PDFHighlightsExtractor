@@ -3,8 +3,13 @@ package com.tikscorp.pdfhighlightextractor.highlight;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Rect;
+import android.graphics.pdf.PdfRenderer;
 import android.os.AsyncTask;
 
+import android.os.Environment;
+import android.os.ParcelFileDescriptor;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -22,24 +27,30 @@ import com.tom_roush.pdfbox.pdmodel.graphics.color.PDDeviceRGB;
 import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
 import com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationTextMarkup;
-import com.tom_roush.pdfbox.rendering.PDFRenderer;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import static com.tikscorp.pdfhighlightextractor.constants.Constants.OUT_FOLDER;
+
 public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
 
 
+    private final ParcelFileDescriptor fd;
     private ProgressBar progressBar;
     private String outputPath;
     private InputStream in;
@@ -54,7 +65,7 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
     private Logger logger = Logger.getLogger(HighlightedTextExtractor.class.getName());
     private Context context;
 
-    public HighlightedTextExtractor(InputStream in, File out, int start, int finish, String outputPath, ProgressBar progressBar, Context context, TextView textViewPercentage) {
+    public HighlightedTextExtractor(InputStream in, File out, int start, int finish, String outputPath, ProgressBar progressBar, Context context, TextView textViewPercentage, ParcelFileDescriptor fileDescriptor) {
         this.in = in;
         this.out = out;
         this.start = start;
@@ -63,6 +74,7 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
         this.progressBar = progressBar;
         this.context = context;
         this.textViewPercentage = textViewPercentage;
+        this.fd = fileDescriptor;
 
     }
 
@@ -72,8 +84,13 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
         stopped = false;
         try {
             Thread.sleep(1000);
-            setProgressBar(1);
-            final PDDocument outPutDocument = new PDDocument();
+            new Runnable() {
+                @Override
+                public void run() {
+                    setProgressBar(1);
+                }
+            };
+            PDDocument outPutDocument = new PDDocument();
             sourceDocument = PDDocument.load(in);
             List<PDPage> allPages = new ArrayList<PDPage>();
             Iterator<PDPage> iterator = sourceDocument.getDocumentCatalog().getPages().iterator();
@@ -85,29 +102,41 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
             List<PDPage> selectedPages = allPages.subList(start - 1, finish);
             List<OutputPage> outputPageList = new LinkedList<>();
             int pageNo = 0;
+            PdfRenderer pdfRenderer = new PdfRenderer(fd);
             for (PDPage page : selectedPages) {
 
                 ++pageNo;
                 if (stopped)
                     break;
+
                 List<PDAnnotation> annotationList = page.getAnnotations();
 
                 List<HighLightedObject> highLightedObjectList = new LinkedList<>();
                 for (PDAnnotation annotation : annotationList) {
                     if (annotation instanceof PDAnnotationTextMarkup) {
-                        highLightedObjectList = processHighlightedText(pageNo, sourceDocument, (PDAnnotationTextMarkup) annotation, page,highLightedObjectList);
+                        highLightedObjectList = processHighlightedText(pageNo, sourceDocument, (PDAnnotationTextMarkup) annotation, page,highLightedObjectList, pdfRenderer);
                     }
                 }
-
-                if(!highLightedObjectList.isEmpty())
-                    outputPageList.add(new OutputPage(pageNo,highLightedObjectList));
-
+                if (!highLightedObjectList.isEmpty()) {
+                    Collections.sort(highLightedObjectList, new Comparator<HighLightedObject>() {
+                        @Override
+                        public int compare(HighLightedObject h1, HighLightedObject h2) {
+                            float h1x = h1.getHighlight().getRectangle().getLowerLeftX();
+                            float h1y = h1.getHighlight().getRectangle().getLowerLeftY();
+                            float h2x = h2.getHighlight().getRectangle().getLowerLeftX();
+                            float h2y = h2.getHighlight().getRectangle().getLowerLeftY();
+                            return (int) (h1y == h2y ? (h2x - h1x) : (h2y - h1y));
+                        }
+                    });
+                    outputPageList.add(new OutputPage(pageNo, highLightedObjectList));
+                }
                 progress = progress+(100/selectedPages.size());
                 System.out.println(progress);
-                if(progress<=100)
+                if(progress<=100) {
+
                     setProgressBar(progress);
 
-
+                }
             }
             if(outputPageList.isEmpty()) {
                 isAnnotationFound = false;
@@ -153,28 +182,56 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
             imageYLoc -= highLightedObject.getHighlight().getRectangle().getHeight()+5;
             contentStream.drawImage(highLightedObject.getPdImage(), 0, imageYLoc, highLightedObject.getHighlight().getRectangle().getWidth(), highLightedObject.getHighlight().getRectangle().getHeight());
         }
+
         setProgressBar(100);
         contentStream.close();
     }
 
 
 
-    private List<HighLightedObject> processHighlightedText(int pageNo, PDDocument pddDocument, PDAnnotationTextMarkup highlight, PDPage page, List<HighLightedObject> highLightedObjectList) throws IOException {
+    private List<HighLightedObject> processHighlightedText(int pageNo, PDDocument pddDocument, PDAnnotationTextMarkup highlight, PDPage page, List<HighLightedObject> highLightedObjectList, PdfRenderer pdfRenderer) throws IOException {
         System.out.print("Running...\n");
         PDRectangle rectangle = highlight.getRectangle();
+
         page.setCropBox(rectangle);
-        page.setAnnotations(null);// Here you draw a rectangle around the area you want to specify
-        PDFRenderer renderer = new PDFRenderer(pddDocument);
-        Bitmap image = renderer.renderImage(pageNo-1, 3f, Bitmap.Config.RGB_565);
+
+
+       // page.setAnnotations(null);// Here you draw a rectangle around the area you want to specify
+       // PDFRenderer renderer = new PDFRenderer(pddDocument);
+       //google lib code
+        PdfRenderer.Page pdfPage = pdfRenderer.openPage(pageNo-1);
+
+        int lowerLeftX = (int) rectangle.getLowerLeftX();
+        int lowerLeftY = (int) rectangle.getLowerLeftY();
+        int upperRightX = (int) rectangle.getUpperRightX();
+        int upperRightY = (int) rectangle.getUpperRightY();
+
+        Bitmap image = Bitmap.createBitmap( 3*pdfPage.getWidth(), 3*pdfPage.getHeight(), Bitmap.Config.ARGB_8888);
+        (new Canvas(image)).drawColor(-1);
+        pdfPage.render(image, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+       // Bitmap image = renderer.renderImage(pageNo-1, 3f, Bitmap.Config.RGB_565);
+        writeToImage(pageNo, image, "img_x");
+
+        Bitmap image1 = Bitmap.createBitmap(image, 3*lowerLeftX,image.getHeight()-3*upperRightY, 3*(upperRightX-lowerLeftX),3*(upperRightY-lowerLeftY));
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        image.compress(Bitmap.CompressFormat.JPEG, 100 , bos);
+        image1.compress(Bitmap.CompressFormat.JPEG, 100 , bos);
+
+      //  writeToImage(pageNo, image1, "img_y");
         PDImageXObject pdImage = new PDImageXObject(pddDocument, new ByteArrayInputStream(bos.toByteArray()),
-                COSName.DCT_DECODE, image.getWidth(), image.getHeight(),
+                COSName.DCT_DECODE, image1.getWidth(), image1.getHeight(),
                 8,
                 PDDeviceRGB.INSTANCE);
         highLightedObjectList.add(new HighLightedObject(pdImage,highlight));
+        pdfPage.close();
         //Draw Image
         return  highLightedObjectList;
+    }
+
+    private void writeToImage(int pageNo, Bitmap image, String prefix) throws FileNotFoundException {
+        File lawfulStorage = new File(Environment.getExternalStorageDirectory(), OUT_FOLDER);
+        File imageFile = new File(lawfulStorage, prefix + (pageNo-1) + ".png");
+        FileOutputStream imageOutStream = new FileOutputStream(imageFile);
+        image.compress(Bitmap.CompressFormat.JPEG, 100, imageOutStream);
     }
 
     @Override
@@ -185,18 +242,27 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
 
     @Override
     protected void onPostExecute(Void aVoid) {
-       new ProgressBarActivity().startCompleteMessageActivity(out);
 
         if(!isAnnotationFound) {
             Intent intent = new Intent(context, MainActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK| Intent.FLAG_ACTIVITY_CLEAR_TOP);
             intent.putExtra(Constants.VAR_SHOW_NO_HIGH_LIGHT_FOUND_MESSAGE,true);
             context.startActivity(intent);
-        }
+        }else
+            new ProgressBarActivity().startCompleteMessageActivity(out);
+
     }
 
-    public void setProgressBar(int progress) {
-        progressBar.setProgress(progress);
-        textViewPercentage.setText(String.valueOf(progress)+"%");
+    public void setProgressBar(final int progress) {
+        ProgressBarActivity progressBarActivity = (ProgressBarActivity) context;
+        progressBarActivity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                progressBar.setProgress(progress);
+                textViewPercentage.setText(String.valueOf(progress)+"%");
+            }
+        });
+
 
     }
 

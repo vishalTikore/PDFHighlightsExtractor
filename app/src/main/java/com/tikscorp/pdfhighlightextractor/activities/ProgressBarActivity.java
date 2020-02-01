@@ -1,24 +1,35 @@
 package com.tikscorp.pdfhighlightextractor.activities;
 
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.RectF;
 import android.net.Uri;
 import android.os.Environment;
+import android.os.ParcelFileDescriptor;
+import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
-import android.view.MenuItem;
+import android.util.Base64;
 import android.view.View;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import com.sun.pdfview.PDFFile;
+import com.sun.pdfview.PDFPage;
 import com.tikscorp.pdfhighlightextractor.highlight.HighlightedTextExtractor;
 import com.tikscorp.pdfhighlightextractor.R;
 import com.tom_roush.pdfbox.util.PDFBoxResourceLoader;
 
+import net.sf.andpdf.nio.ByteBuffer;
+
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 
 import static com.tikscorp.pdfhighlightextractor.constants.Constants.OUT_FOLDER;
@@ -50,11 +61,13 @@ public class ProgressBarActivity extends AppCompatActivity {
     }
 
     @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
+    public void onBackPressed() {
         highlightedTextExtractor.cancel(true);
-        return super.onOptionsItemSelected(item);
+        finish();
+        super.onBackPressed();
     }
 
+    
     @Override
     protected void onStop() {
         highlightedTextExtractor.cancel(true);
@@ -70,6 +83,15 @@ public class ProgressBarActivity extends AppCompatActivity {
         if (!outputFolder.exists()) {
             outputFolder.mkdirs();
         }
+        ContentResolver contentResolver = this.getContentResolver();
+        ParcelFileDescriptor fileDescriptor = null;
+        try {
+            fileDescriptor = contentResolver.openFileDescriptor(originalUri, "r");
+
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+
         InputStream file = null;
         try {
             file = getContentResolver().openInputStream(originalUri);
@@ -78,8 +100,8 @@ public class ProgressBarActivity extends AppCompatActivity {
         }
         outputPath = new File(outputFolder,getFileName(originalUri));
         PDFBoxResourceLoader.init(getApplicationContext());
-        highlightedTextExtractor = new HighlightedTextExtractor(file, outputPath, 1, -1,outputPath.getPath(),progressBar,this,textViewPercentage);
-        highlightedTextExtractor.execute();
+       highlightedTextExtractor = new HighlightedTextExtractor(file, outputPath, 1, -1,outputPath.getPath(),progressBar,this,textViewPercentage, fileDescriptor);
+       highlightedTextExtractor.execute();
     }
 
     /**
