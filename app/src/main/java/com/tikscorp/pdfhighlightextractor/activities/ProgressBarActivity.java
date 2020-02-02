@@ -41,6 +41,7 @@ public class ProgressBarActivity extends AppCompatActivity {
     static Context context = null;
     HighlightedTextExtractor highlightedTextExtractor;
     TextView textViewPercentage = null;
+    TextView progressBarStatus=null;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -49,6 +50,8 @@ public class ProgressBarActivity extends AppCompatActivity {
         progressBar.setMax(100);
         progressBar.setVisibility(View.VISIBLE);
         textViewPercentage = findViewById(R.id.textPercentage);
+        textViewPercentage.setVisibility(View.INVISIBLE);
+        progressBarStatus = findViewById(R.id.textProcessingPDFStatus);
         Intent intent = getIntent();
         extractHighlightedTextFromPDF(intent.getData());
         context = this;
@@ -67,12 +70,7 @@ public class ProgressBarActivity extends AppCompatActivity {
         super.onBackPressed();
     }
 
-    
-    @Override
-    protected void onStop() {
-        highlightedTextExtractor.cancel(true);
-        super.onStop();
-    }
+
 
     /**
      * Creates out_folder and call HighlightedTextExtractor's Async run method
@@ -100,7 +98,7 @@ public class ProgressBarActivity extends AppCompatActivity {
         }
         outputPath = new File(outputFolder,getFileName(originalUri));
         PDFBoxResourceLoader.init(getApplicationContext());
-        highlightedTextExtractor = new HighlightedTextExtractor(file, outputPath, 1, -1,outputPath.getPath(),progressBar,this,textViewPercentage, fileDescriptor);
+        highlightedTextExtractor = new HighlightedTextExtractor(file, outputPath, 1, -1,outputPath.getPath(),progressBar,this,textViewPercentage, progressBarStatus,fileDescriptor);
         highlightedTextExtractor.execute();
     }
 

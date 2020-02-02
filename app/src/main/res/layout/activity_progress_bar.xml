@@ -5,8 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#1b2940"
-    tools:context=".activities.ProgressBarActivity"
-    tools:showIn="@layout/activity_progress_bar">
+    tools:context=".activities.ProgressBarActivity">
 
     <ProgressBar
         android:id="@+id/progressBar"
@@ -56,6 +55,23 @@
         app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/textProcessingPDFStatus"
+        android:layout_width="314dp"
+        android:layout_height="46dp"
+        android:layout_marginBottom="13dp"
+        android:layout_marginTop="27dp"
+        android:text="Loading PDF"
+        android:gravity="center"
+        android:textColor="#f9faf8"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        app:layout_constraintBottom_toTopOf="@+id/progressBar"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.55" />
 
 
 </android.support.constraint.ConstraintLayout>

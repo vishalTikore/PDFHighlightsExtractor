@@ -10,6 +10,7 @@ import android.os.AsyncTask;
 import android.os.Environment;
 import android.os.ParcelFileDescriptor;
 import android.support.annotation.NonNull;
+import android.view.View;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -60,12 +61,13 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
     private int finish;
     private boolean isAnnotationFound = true;
     private TextView textViewPercentage = null;
+    private TextView progressBarStatus = null;
 
     public static final int FINISH = -1;
     private Logger logger = Logger.getLogger(HighlightedTextExtractor.class.getName());
     private Context context;
 
-    public HighlightedTextExtractor(InputStream in, File out, int start, int finish, String outputPath, ProgressBar progressBar, Context context, TextView textViewPercentage, ParcelFileDescriptor fileDescriptor) {
+    public HighlightedTextExtractor(InputStream in, File out, int start, int finish, String outputPath, ProgressBar progressBar, Context context, TextView textViewPercentage, TextView progressBarStatus,ParcelFileDescriptor fileDescriptor) {
         this.in = in;
         this.out = out;
         this.start = start;
@@ -74,6 +76,7 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
         this.progressBar = progressBar;
         this.context = context;
         this.textViewPercentage = textViewPercentage;
+        this.progressBarStatus = progressBarStatus;
         this.fd = fileDescriptor;
 
     }
@@ -90,12 +93,6 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
             int progress = 0;
             int pageNo = 0;
             Thread.sleep(1000);
-            new Runnable() {
-                @Override
-                public void run() {
-                    setProgressBar(1);
-                }
-            };
             sourceDocument = PDDocument.load(in);
             Iterator<PDPage> iterator = sourceDocument.getDocumentCatalog().getPages().iterator();
             while (iterator.hasNext()) {
@@ -105,7 +102,12 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
             finish = finish == FINISH ? allPages.size() : finish;
             List<PDPage> selectedPages = allPages.subList(start - 1, finish);
 
+            setProgressStatus("Searching highlighted text");
+            showPercentageTextView();
             for (PDPage page : selectedPages) {
+                if(isCancelled())
+                    break;
+                System.out.println("Running page "+ page);
                 ++pageNo;
                 if (stopped)
                     break;
@@ -118,16 +120,26 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
                 fillHighLightedObjectList(sourceDocument, pageNo, pdfRenderer, highLightedObjectList, highlightedRectangleList);
                 fillOutPutPageList(outputPageList, pageNo, highLightedObjectList);
 
-                progress = progress+(100/selectedPages.size());
+                progress = ((pageNo*100)/selectedPages.size());
                 if(progress<=100) {
                     setProgressBar(progress);
                 }
             }
             if(outputPageList.isEmpty()) {
+                setProgressStatus("No highlights");
                 isAnnotationFound = false;
             }else {
+                setProgressStatus("Generating Output PDF");
+                int outPageCount=1;
+                setProgressBar(0);
+                Thread.sleep(2000);
                 for (OutputPage outputPage : outputPageList) {
                     addPageNoToPageAndDrawImage(outPutDocument, outputPage);
+                    progress = ((100*outPageCount)/outputPageList.size());
+                    if(progress<=100) {
+                        setProgressBar(progress);
+                    }
+                    ++outPageCount;
                 }
             }
             sourceDocument.close();
@@ -138,6 +150,18 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
             logger.log(Level.ALL,"Error while extracting highlighted text from pdf",ex);
         }
 
+    }
+
+    private void showPercentageTextView() {
+        ProgressBarActivity progressBarActivity = (ProgressBarActivity) context;
+
+        progressBarActivity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+
+                textViewPercentage.setVisibility(View.VISIBLE);
+            }
+        });
     }
 
     /**
@@ -151,20 +175,23 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
         pdfPage.render(image, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
 
         for(HighlightedRectangle highlightedRectangle: highlightedRectangleList){
+            System.out.println("Running highlighted rectangle "+ pageNo);
             Bitmap highlightedBitmapImage = getHighlightedBitmapImage(highlightedRectangle, image, qualityFactor);
+           // writeToImage(pageNo, highlightedBitmapImage, "img_y");
             PDImageXObject pdImage = getPdImageXObjectFromBitmap(sourceDocument, highlightedBitmapImage);
             highLightedObjectList.add(new HighLightedObject(pdImage,highlightedRectangle));
         }
         pdfPage.close();
     }
-
     /**
      *Get highlighted rectangle list
      */
     private void fillHighLightedRectangleList(List<PDAnnotation> annotationList, List<HighlightedRectangle> highlightedRectangleList) {
         for (PDAnnotation annotation : annotationList) {
             if (annotation instanceof PDAnnotationTextMarkup) {
-                highlightedRectangleList.add(getHighlightedRectangle((PDAnnotationTextMarkup) annotation));
+                HighlightedRectangle highlightedRectangle = getHighlightedRectangle((PDAnnotationTextMarkup) annotation);
+                if(!(highlightedRectangle.getHeight() == 0 || highlightedRectangle.getWidth() == 0))
+                     highlightedRectangleList.add(highlightedRectangle);
             }
         }
     }
@@ -229,7 +256,6 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
             contentStream.drawImage(highLightedObject.getPdImage(), 0, imageYLoc, highLightedObject.getHighlight().getWidth(), highLightedObject.getHighlight().getHeight());
         }
 
-        setProgressBar(100);
         contentStream.close();
     }
 
@@ -238,7 +264,7 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
     private PDImageXObject getPdImageXObjectFromBitmap(PDDocument pddDocument, Bitmap highlightedBitmapImage) throws IOException {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         highlightedBitmapImage.compress(Bitmap.CompressFormat.JPEG, 50 , bos);
-        //writeToImage(pageNo, image1, "img_y");
+
         return new PDImageXObject(pddDocument, new ByteArrayInputStream(bos.toByteArray()),
                 COSName.DCT_DECODE, highlightedBitmapImage.getWidth(), highlightedBitmapImage.getHeight(),
                 8,
@@ -311,14 +337,26 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
 
     public void setProgressBar(final int progress) {
         ProgressBarActivity progressBarActivity = (ProgressBarActivity) context;
+
         progressBarActivity.runOnUiThread(new Runnable() {
             @Override
             public void run() {
+
                 progressBar.setProgress(progress);
                 textViewPercentage.setText(String.valueOf(progress)+"%");
             }
         });
 
+    }
+
+    public void setProgressStatus(final String progressStatus) {
+        ProgressBarActivity progressBarActivity = (ProgressBarActivity) context;
+        progressBarActivity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                progressBarStatus.setText(progressStatus);
+            }
+        });
 
     }
 
