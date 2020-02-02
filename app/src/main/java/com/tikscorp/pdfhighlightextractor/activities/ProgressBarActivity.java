@@ -100,8 +100,8 @@ public class ProgressBarActivity extends AppCompatActivity {
         }
         outputPath = new File(outputFolder,getFileName(originalUri));
         PDFBoxResourceLoader.init(getApplicationContext());
-       highlightedTextExtractor = new HighlightedTextExtractor(file, outputPath, 1, -1,outputPath.getPath(),progressBar,this,textViewPercentage, fileDescriptor);
-       highlightedTextExtractor.execute();
+        highlightedTextExtractor = new HighlightedTextExtractor(file, outputPath, 1, -1,outputPath.getPath(),progressBar,this,textViewPercentage, fileDescriptor);
+        highlightedTextExtractor.execute();
     }
 
     /**

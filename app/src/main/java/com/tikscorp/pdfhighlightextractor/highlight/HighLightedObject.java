@@ -4,10 +4,10 @@ import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationTextMarkup;
 
 public class HighLightedObject {
-    private PDAnnotationTextMarkup highlight;
+    private HighlightedRectangle highlight;
     private PDImageXObject pdImage;
 
-    public PDAnnotationTextMarkup getHighlight() {
+    public HighlightedRectangle getHighlight() {
         return highlight;
     }
 
@@ -15,7 +15,7 @@ public class HighLightedObject {
         return pdImage;
     }
 
-    public HighLightedObject(PDImageXObject pdImage, PDAnnotationTextMarkup highlight) {
+    public HighLightedObject(PDImageXObject pdImage, HighlightedRectangle highlight) {
     this.pdImage = pdImage;
     this.highlight = highlight;
     }

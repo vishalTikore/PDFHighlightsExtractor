@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#26a69a"
+    android:background="#1b2940"
     tools:context=".activities.CompleteMessageActivity"
     tools:showIn="@layout/activity_complete_message">
 
@@ -57,7 +57,7 @@
     <LinearLayout
         android:layout_width="290dp"
         android:layout_height="170dp"
-        android:background="#26a69a"
+        android:background="#1b2940"
         android:layout_marginTop="10dp"
         android:orientation="horizontal"
         android:padding="15dp"

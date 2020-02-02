@@ -4,12 +4,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.Rect;
 import android.graphics.pdf.PdfRenderer;
 import android.os.AsyncTask;
 
 import android.os.Environment;
 import android.os.ParcelFileDescriptor;
+import android.support.annotation.NonNull;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -83,6 +83,12 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
         PDDocument sourceDocument = null;
         stopped = false;
         try {
+            PDDocument outPutDocument = new PDDocument();
+            List<PDPage> allPages = new ArrayList<PDPage>();
+            List<OutputPage> outputPageList = new LinkedList<>();
+            PdfRenderer pdfRenderer = new PdfRenderer(fd);
+            int progress = 0;
+            int pageNo = 0;
             Thread.sleep(1000);
             new Runnable() {
                 @Override
@@ -90,52 +96,31 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
                     setProgressBar(1);
                 }
             };
-            PDDocument outPutDocument = new PDDocument();
             sourceDocument = PDDocument.load(in);
-            List<PDPage> allPages = new ArrayList<PDPage>();
             Iterator<PDPage> iterator = sourceDocument.getDocumentCatalog().getPages().iterator();
             while (iterator.hasNext()) {
                 allPages.add(iterator.next());
             }
-            int progress = 0;
+
             finish = finish == FINISH ? allPages.size() : finish;
             List<PDPage> selectedPages = allPages.subList(start - 1, finish);
-            List<OutputPage> outputPageList = new LinkedList<>();
-            int pageNo = 0;
-            PdfRenderer pdfRenderer = new PdfRenderer(fd);
-            for (PDPage page : selectedPages) {
 
+            for (PDPage page : selectedPages) {
                 ++pageNo;
                 if (stopped)
                     break;
 
                 List<PDAnnotation> annotationList = page.getAnnotations();
+                List<HighLightedObject> highLightedObjectList = new ArrayList<>();
+                List<HighlightedRectangle> highlightedRectangleList=new ArrayList<>();
 
-                List<HighLightedObject> highLightedObjectList = new LinkedList<>();
-                for (PDAnnotation annotation : annotationList) {
-                    if (annotation instanceof PDAnnotationTextMarkup) {
-                        highLightedObjectList = processHighlightedText(pageNo, sourceDocument, (PDAnnotationTextMarkup) annotation, page,highLightedObjectList, pdfRenderer);
-                    }
-                }
-                if (!highLightedObjectList.isEmpty()) {
-                    Collections.sort(highLightedObjectList, new Comparator<HighLightedObject>() {
-                        @Override
-                        public int compare(HighLightedObject h1, HighLightedObject h2) {
-                            float h1x = h1.getHighlight().getRectangle().getLowerLeftX();
-                            float h1y = h1.getHighlight().getRectangle().getLowerLeftY();
-                            float h2x = h2.getHighlight().getRectangle().getLowerLeftX();
-                            float h2y = h2.getHighlight().getRectangle().getLowerLeftY();
-                            return (int) (h1y == h2y ? (h2x - h1x) : (h2y - h1y));
-                        }
-                    });
-                    outputPageList.add(new OutputPage(pageNo, highLightedObjectList));
-                }
+                fillHighLightedRectangleList(annotationList, highlightedRectangleList);
+                fillHighLightedObjectList(sourceDocument, pageNo, pdfRenderer, highLightedObjectList, highlightedRectangleList);
+                fillOutPutPageList(outputPageList, pageNo, highLightedObjectList);
+
                 progress = progress+(100/selectedPages.size());
-                System.out.println(progress);
                 if(progress<=100) {
-
                     setProgressBar(progress);
-
                 }
             }
             if(outputPageList.isEmpty()) {
@@ -155,14 +140,75 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
 
     }
 
+    /**
+     *Get highlighted object list
+     */
+    private void fillHighLightedObjectList(PDDocument sourceDocument, int pageNo, PdfRenderer pdfRenderer, List<HighLightedObject> highLightedObjectList, List<HighlightedRectangle> highlightedRectangleList) throws IOException {
+        int qualityFactor = 3;
+        PdfRenderer.Page pdfPage = pdfRenderer.openPage(pageNo-1);
+        Bitmap image = Bitmap.createBitmap( qualityFactor*pdfPage.getWidth(), qualityFactor*pdfPage.getHeight(), Bitmap.Config.ARGB_8888);
+        (new Canvas(image)).drawColor(-1);
+        pdfPage.render(image, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+
+        for(HighlightedRectangle highlightedRectangle: highlightedRectangleList){
+            Bitmap highlightedBitmapImage = getHighlightedBitmapImage(highlightedRectangle, image, qualityFactor);
+            PDImageXObject pdImage = getPdImageXObjectFromBitmap(sourceDocument, highlightedBitmapImage);
+            highLightedObjectList.add(new HighLightedObject(pdImage,highlightedRectangle));
+        }
+        pdfPage.close();
+    }
+
+    /**
+     *Get highlighted rectangle list
+     */
+    private void fillHighLightedRectangleList(List<PDAnnotation> annotationList, List<HighlightedRectangle> highlightedRectangleList) {
+        for (PDAnnotation annotation : annotationList) {
+            if (annotation instanceof PDAnnotationTextMarkup) {
+                highlightedRectangleList.add(getHighlightedRectangle((PDAnnotationTextMarkup) annotation));
+            }
+        }
+    }
+
+    /**
+     * Get output page list
+     */
+    private void fillOutPutPageList(List<OutputPage> outputPageList, int pageNo, List<HighLightedObject> highLightedObjectList) {
+        if (!highLightedObjectList.isEmpty()) {
+            sortAnnotationAsPerCoordinates(highLightedObjectList);
+            outputPageList.add(new OutputPage(pageNo, highLightedObjectList));
+        }
+    }
+
+    /**
+     * Sort annotation as per their location on page
+     */
+    private void sortAnnotationAsPerCoordinates(List<HighLightedObject> highLightedObjectList) {
+        Collections.sort(highLightedObjectList, new Comparator<HighLightedObject>() {
+            @Override
+            public int compare(HighLightedObject h1, HighLightedObject h2) {
+                float h1x = h1.getHighlight().getX();
+                float h1y = h1.getHighlight().getY();
+                float h2x = h2.getHighlight().getX();
+                float h2y = h2.getHighlight().getY();
+                return (int) (h1y == h2y ? (h2x - h1x) : (h2y - h1y));
+            }
+        });
+    }
+
+    /**
+     * Add page number to output page and draw image on out document
+     * @param outDocument
+     * @param outputPage
+     * @throws IOException
+     */
     private void addPageNoToPageAndDrawImage(PDDocument outDocument, OutputPage outputPage) throws IOException {
         int height = 0;
         int width = 0;
         for (HighLightedObject highLightedObject :
                 outputPage.getHighLightedObjectList()) {
-            height += highLightedObject.getHighlight().getRectangle().getHeight()+5;
-            if(width< highLightedObject.getHighlight().getRectangle().getWidth())
-                width = (int) highLightedObject.getHighlight().getRectangle().getWidth() ;
+            height += highLightedObject.getHighlight().getHeight()+5;
+            if(width< highLightedObject.getHighlight().getWidth())
+                width = (int) highLightedObject.getHighlight().getWidth() ;
         }
         outDocument.addPage(new PDPage(new PDRectangle(width+1, height+30)));
         int page_index = outDocument.getDocumentCatalog().getPages().getCount();
@@ -179,8 +225,8 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
         contentStream.endText();
         int imageYLoc = height+30;
         for (HighLightedObject highLightedObject :outputPage.getHighLightedObjectList()) {
-            imageYLoc -= highLightedObject.getHighlight().getRectangle().getHeight()+5;
-            contentStream.drawImage(highLightedObject.getPdImage(), 0, imageYLoc, highLightedObject.getHighlight().getRectangle().getWidth(), highLightedObject.getHighlight().getRectangle().getHeight());
+            imageYLoc -= highLightedObject.getHighlight().getHeight()+5;
+            contentStream.drawImage(highLightedObject.getPdImage(), 0, imageYLoc, highLightedObject.getHighlight().getWidth(), highLightedObject.getHighlight().getHeight());
         }
 
         setProgressBar(100);
@@ -188,45 +234,55 @@ public class HighlightedTextExtractor extends AsyncTask<Void, Void, Void> {
     }
 
 
+    @NonNull
+    private PDImageXObject getPdImageXObjectFromBitmap(PDDocument pddDocument, Bitmap highlightedBitmapImage) throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        highlightedBitmapImage.compress(Bitmap.CompressFormat.JPEG, 50 , bos);
+        //writeToImage(pageNo, image1, "img_y");
+        return new PDImageXObject(pddDocument, new ByteArrayInputStream(bos.toByteArray()),
+                COSName.DCT_DECODE, highlightedBitmapImage.getWidth(), highlightedBitmapImage.getHeight(),
+                8,
+                PDDeviceRGB.INSTANCE);
+    }
 
-    private List<HighLightedObject> processHighlightedText(int pageNo, PDDocument pddDocument, PDAnnotationTextMarkup highlight, PDPage page, List<HighLightedObject> highLightedObjectList, PdfRenderer pdfRenderer) throws IOException {
-        System.out.print("Running...\n");
+    /**
+     * Crop full image as per highlighted rectangle and return cropped bitmap image
+     * @param highlightedRectangle
+     * @param image
+     * @param qualityFactor
+     * @return
+     */
+    private Bitmap getHighlightedBitmapImage(HighlightedRectangle highlightedRectangle, Bitmap image, int qualityFactor) {
+        int x = qualityFactor*highlightedRectangle.getX();
+        int upperY = highlightedRectangle.getHeight() + highlightedRectangle.getY();
+        //PDFBox take y == 0 from top of page while bitmap takes from bottom of page+
+        int y = image.getHeight()- (qualityFactor* upperY);
+        int height= qualityFactor*highlightedRectangle.getHeight();
+        int width=qualityFactor*highlightedRectangle.getWidth();
+        return Bitmap.createBitmap(image, x, y, width, height);
+    }
+
+    /**
+     * Returns highlighted rectangle with coordinates from annotation object
+     * @param highlight
+     * @return
+     */
+    private HighlightedRectangle getHighlightedRectangle(PDAnnotationTextMarkup highlight) {
         PDRectangle rectangle = highlight.getRectangle();
-
-        page.setCropBox(rectangle);
-
-
-       // page.setAnnotations(null);// Here you draw a rectangle around the area you want to specify
-       // PDFRenderer renderer = new PDFRenderer(pddDocument);
-       //google lib code
-        PdfRenderer.Page pdfPage = pdfRenderer.openPage(pageNo-1);
-
         int lowerLeftX = (int) rectangle.getLowerLeftX();
         int lowerLeftY = (int) rectangle.getLowerLeftY();
         int upperRightX = (int) rectangle.getUpperRightX();
         int upperRightY = (int) rectangle.getUpperRightY();
-
-        Bitmap image = Bitmap.createBitmap( 3*pdfPage.getWidth(), 3*pdfPage.getHeight(), Bitmap.Config.ARGB_8888);
-        (new Canvas(image)).drawColor(-1);
-        pdfPage.render(image, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
-       // Bitmap image = renderer.renderImage(pageNo-1, 3f, Bitmap.Config.RGB_565);
-        writeToImage(pageNo, image, "img_x");
-
-        Bitmap image1 = Bitmap.createBitmap(image, 3*lowerLeftX,image.getHeight()-3*upperRightY, 3*(upperRightX-lowerLeftX),3*(upperRightY-lowerLeftY));
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        image1.compress(Bitmap.CompressFormat.JPEG, 100 , bos);
-
-      //  writeToImage(pageNo, image1, "img_y");
-        PDImageXObject pdImage = new PDImageXObject(pddDocument, new ByteArrayInputStream(bos.toByteArray()),
-                COSName.DCT_DECODE, image1.getWidth(), image1.getHeight(),
-                8,
-                PDDeviceRGB.INSTANCE);
-        highLightedObjectList.add(new HighLightedObject(pdImage,highlight));
-        pdfPage.close();
-        //Draw Image
-        return  highLightedObjectList;
+        return new HighlightedRectangle(lowerLeftX,lowerLeftY,upperRightY-lowerLeftY, upperRightX-lowerLeftX);
     }
 
+    /**
+     * Method for debug purpose , write image with name having given prefix and page number
+     * @param pageNo
+     * @param image
+     * @param prefix
+     * @throws FileNotFoundException
+     */
     private void writeToImage(int pageNo, Bitmap image, String prefix) throws FileNotFoundException {
         File lawfulStorage = new File(Environment.getExternalStorageDirectory(), OUT_FOLDER);
         File imageFile = new File(lawfulStorage, prefix + (pageNo-1) + ".png");
